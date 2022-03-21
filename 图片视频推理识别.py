@@ -17,34 +17,48 @@ import keyboard
 
 
 '''
-注意事项：选择识别模式后，需要修改路径的话(单个视频的路径修改就去单个视频识别，多个视频就去多个视频识别，屏幕识别就去屏幕识别)。
-        路径前的r是屏蔽转义符，
+注意事项：1 . 选择识别模式后，需要修改路径的话(单个视频的路径修改就去单个视频识别，多个视频就去多个视频识别，屏幕识别就去屏幕识别)。
+            路径前的r是屏蔽转义符，
+        2 . 请检查模型路径'--weights',和所选的模式,及该模式的参数   !!!!!!!!!!
 '''
 parser = argparse.ArgumentParser()
-parser.add_argument('--weights', type=str, default=r'C:\Users\Banditek\Desktop\yolov5-6.0\weights\CF-600img.pt', help='模型地址,请使用绝对路径')
-parser.add_argument('--imgsz', type=int, default=640, help='和你训练模型时imgsz一样')
+parser.add_argument('--weights', type=str, default=r'C:\Users\Zzzz\Desktop\杂项\yolov5-6.0\weights\yolov5s.pt', help='模型地址,请使用绝对路径')
+# parser.add_argument('--imgsz', type=int, default=640, help='和你训练模型时imgsz一样')
+parser.add_argument('--cpu2cuda', type=str, default='cuda', help='英伟达显卡请使用cuda，否则使用cpu，不支持amd显卡')
+parser.add_argument('--conf_thres', type=float, default=0.5, help='置信阈值')
+parser.add_argument('--iou_thres', type=float, default=0.05, help='交并比阈值')
+
+
 '''
-        ！！！！！！！！！！！！！！ 模式选择(必选)！！！！！！！！！！！！！
+                     ！！！！！！！！！！！！！！ 模式选择(必选)！！！！！！！！！！！！！
 '''
-parser.add_argument('--choose', type=int, default=0, help='模式选择:  0：单个视频识别，  1：多个视频识别，  2：屏幕识别')
+parser.add_argument('--choose', type=int, default=2, help='模式选择:  0：单个视频识别，  1：多个视频识别，  2：屏幕识别')
+parser.add_argument('--save_img', type=bool, default=False, help='是否保存检测到的图片')
+
 '''
-0：单个视频识别
+0：单个视频识别参数
 '''
 parser.add_argument('--video_path', type=str, default=r'D:\obs\video\297510698-1-80.flv', help='输入路径：单个<视频文件>的绝对路径')
 parser.add_argument('--output_path', type=str, default=r'D:/obs/xml', help='输出路径单个视频文件的图片输出路径')
 '''
-1：多个视频识别
+1：多个视频识别参数
 '''
 parser.add_argument('--videos_path', type=str, default=r'D:\obs\xml', help='输入路径：多个视频<文件夹>的绝对路径')
 parser.add_argument('--outputs_path', type=str, default=r'D:/obs/img', help='输出路径：多个视频文件的图片输出路径')
 '''
-2：屏幕识别
+2：屏幕识别参数
 '''
 parser.add_argument('--region', type=tuple, default=(1.0, 1.0), help='屏幕检测范围；分别为横向和竖向，(1.0, 1.0)表示全屏检测，越低检测范围越小(始终保持屏幕中心为中心)')
 parser.add_argument('--show-window', type=bool, default=True, help='是否显示实时检测窗口(新版里改进了效率。若为True，不要去点右上角的X！)')
-parser.add_argument('--resize-window', type=float, default=1/3, help='缩放实时检测窗口大小')
-parser.add_argument('--top-most', type=bool, default=False, help='是否保持实时检测窗口置顶，')
+parser.add_argument('--resize-window', type=float, default=1/2, help='缩放实时检测窗口大小')
+parser.add_argument('--top-most', type=bool, default=True, help='是否保持实时检测窗口置顶，')
 parser.add_argument('--mss_output_path', type=str, default=r'D:/obs/img', help='输出路径屏幕识别的图片输出路径')
+'''
+3.勿动,变量定义区域
+'''
+parser.add_argument('--img_size', type=int, default=640, help='')
+
+
 args = parser.parse_args()
 
 '''mss截图'''
@@ -72,11 +86,12 @@ def get_screen_size():
 '''model'''
 
 def load_model(args):
-    device = torch.device('cuda')  # 定义device 选择用gpu还是cpu
+    device = torch.device('{}'.format(args.cpu2cuda))  # 定义device 选择用gpu还是cpu
     #weights = r'C:\Users\Banditek\Desktop\yolov5-6.0\weights\CF-600img.pt'  # 训练好的模型地址
     imgsz = 640  # 训练时的分辨率是多少，这里就填多少
     model = attempt_load(args.weights, map_location=device)      #导入模型
-    model.half()  # to FP16
+    if args.cpu2cuda:
+        model.half()  # to FP16
     model(torch.zeros(1,3,imgsz,imgsz).to(device).type_as(next(model.parameters()))) #模型在cuda上初始化
     return model
 
@@ -101,7 +116,7 @@ def wangluo(image,aims):
     # 50ms左右
 
     pred = model(img, augment='store_true')[0]  # 初始化数据
-    pred = non_max_suppression(pred, conf_thres, iou_thres, classes=None, agnostic=False)  # 4跟随75，传入参数进行推理
+    pred = non_max_suppression(pred, conf_thres = args.conf_thres, iou_thres = args.iou_thres, classes=None, agnostic=False)  # 4跟随75，传入参数进行推理
     # tis2 = time.perf_counter()
     # print(tis2 - tis1)
     # print(pred)                                                     #输出检测到的图片数据
@@ -135,9 +150,9 @@ def video2image(video_input,output_path):
     frame_frequency = 10  # 提取视频的频率，每frameFrequency帧提取一张图片，提取完整视频帧设置为1
 
     cap = cv2.VideoCapture(video_input)  # 读取视频文件
-    frameall = int(cap.get(7))  # 获取总帧数
+    frameall = int(cap.get(7))  # 7获取总帧数,cv2.CAP_PROP_FRAME_COUNT
     print('本次识别视频一共有',frameall,'帧')
-    print('开始提取', video_input, '视频的图片')
+    print('开始提取', video_input, '视频')
 
     while True:
         aims = []
@@ -149,15 +164,16 @@ def video2image(video_input,output_path):
         '''进行推理'''
         wangluo(image,aims)
         '''推理结束，判断是否有识别出的数据'''
-        if len(aims):
-            # if times % frame_frequency == 0:
-            img_name = str(count).zfill(6) + '.jpg'  # 图片计数，6位上限
-            cv2.imwrite(output_path + os.sep + img_name, image)  # 存储图片
-            count += 1
-            # 输出提示
-            if times % 100 == 0:
-                #print(output_path + os.sep + img_name)
-                print('视频提取进度:',round((times/frameall)*100,1),'%','\t','————{ 在运行框中，按< L >跳过本次识别','如需停止请杀死程序 }————')
+        if args.save_img:
+            if len(aims):
+                if times % frame_frequency == 0:
+                    img_name = str(count).zfill(6) + '.jpg'  # 图片计数，6位上限
+                    cv2.imwrite(output_path + os.sep + img_name, image)  # 存储图片
+                    count += 1
+                    # 输出提示
+                    if times % 100 == 0:
+                        #print(output_path + os.sep + img_name)
+                        print('视频提取进度:',round((times/frameall)*100,1),'%','\t','————{ 运行框中，按< L >跳过此视频识别','如需停止请杀死程序 }————')
         if keyboard.is_pressed('l'):
             print('————已跳过本次识别...')
             break
@@ -166,38 +182,43 @@ def video2image(video_input,output_path):
 def fun_mss(mss_output_path):
     '''循环函数'''
     count = 0  # 计数用，分割的图片按照count来命名
-
+    cv2.namedWindow('detect', cv2.WINDOW_NORMAL)  # 创建窗口
+    cv2.resizeWindow('detect', int(len_x * args.resize_window), int(len_y * args.resize_window))  # 定义窗口大小
+    img_run = cv2.imread('photo_20200624163252.png')
+    cv2.imshow('detect', img_run)  # 显示窗口
     while True:
+        if cv2.getWindowProperty('detect', 1) < 0:
+            #print('quit')
+            break
         aims = []
-        img0 = grab_screen_mss(monitor)
-        img0 = cv2.resize(img0, (len_x, len_y))
-        wangluo(img0,aims)
-        if len(aims):
-            img_name = str(count).zfill(6) + '.jpg'  # 图片计数，6位上限
-            cv2.imwrite(mss_output_path + os.sep + img_name, img0)  # 存储图片
-            count += 1
-            print('已识别图片{} 并存入文件夹'.format(img_name),'————{ 在运行框中，按< L >退出屏幕识别 }————')
-            if args.show_window:
-                for i, det in enumerate(aims):
-                    tag, x_center, y_center, width, height = det
-                    x_center, width = len_x * float(x_center), len_x * float(width)
-                    y_center, height = len_y * float(y_center), len_y * float(height)
-                    top_left = (int(x_center - width / 2.), int(y_center - height / 2.))
-                    bottom_right = (int(x_center + width / 2.), int(y_center + height / 2.))
-                    cv2.rectangle(img0, top_left, bottom_right, (0, 255, 0), thickness=3)
+        image = grab_screen_mss(monitor)
+        image = cv2.resize(image, (len_x, len_y))
+        wangluo(image,aims)
+        aims = aims
+        if args.save_img:
+            if len(aims):
+                img_name = str(count).zfill(6) + '.jpg'  # 图片计数，6位上限
+                cv2.imwrite(mss_output_path + os.sep + img_name, image)  # 存储图片
+                count += 1
+                print('已识别图片{} 并存入文件夹'.format(img_name),'————{ 在显示窗口按< L >键退出识别 or 直接关闭窗口 }————')
         if args.show_window:
-            cv2.namedWindow('csgo-detect', cv2.WINDOW_NORMAL)
-            cv2.resizeWindow('csgo-detect', int(len_x * args.resize_window), int(len_y * args.resize_window))
-            cv2.imshow('csgo-detect', img0)
+            for i, det in enumerate(aims):
+                tag, x_center, y_center, width, height = det
+                x_center, width = len_x * float(x_center), len_x * float(width)
+                y_center, height = len_y * float(y_center), len_y * float(height)
+                top_left = (int(x_center - width / 2.), int(y_center - height / 2.))
+                bottom_right = (int(x_center + width / 2.), int(y_center + height / 2.))
+                cv2.rectangle(image, top_left, bottom_right, (0, 255, 0), thickness=3)
+        if args.show_window:
+            cv2.imshow('detect', image)      #显示窗口
             if args.top_most:
-                hwnd = win32gui.FindWindow(None, 'csgo-detect')
-                CVRECT = cv2.getWindowImageRect('csgo-detect')
+                hwnd = win32gui.FindWindow(None, 'detect')
+                CVRECT = cv2.getWindowImageRect('detect')
                 win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
                                       win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
         if cv2.waitKey(1) & 0xff == ord('l'):  # 2如果检测到按到‘l’，就退出此窗口，l可以自定义
             cv2.destroyAllWindows()
             break
-
 top_x, top_y, x, y = get_parameters()  # x， y截取显示器的分辨率大小
 len_x, len_y = int(x * args.region[0]), int(y * args.region[1])  # 原生分辨率*检测比例，横向对比#截图范围的左上角坐标
 top_x, top_y = int(top_x + x // 2 * (1. - args.region[0])), int(
@@ -205,15 +226,13 @@ top_x, top_y = int(top_x + x // 2 * (1. - args.region[0])), int(
 monitor = {'left': top_x, 'top': top_y, 'width': len_x,
            'height': len_y}  # 用mss截取检测图片的分辨率大小，横向对比top_x = 0,  top_y = 0，len_x = 1920,  len_y = 1080
 
-'''变量定义'''
+'''以上函数的变量定义'''
 img_size = 640
 model = load_model(args)
 stride = int(model.stride.max())
-device = 'cuda' if torch.cuda.is_available() else ''  # 4定义device
+device = 'cuda' if torch.cuda.is_available() else 'cpu'  # 4定义device
 half = device != 'cpu'
-conf_thres = 0.25
-iou_thres = 0.05
-imgsz = args.imgsz
+
 
 if __name__ == '__main__':
 
@@ -251,8 +270,8 @@ if __name__ == '__main__':
         '''mss屏幕识别'''
     elif args.choose == 2:
         mss_output_path = args.mss_output_path          #输出图片目录
-        print('模式 2：———— 屏幕识别，按< L >键退出识别')
+        print('模式 2：———— 屏幕识别，在显示窗口按< L >键退出识别 or 直接关闭窗口')
         fun_mss(mss_output_path)
-        print('视频已提取完成，程序退出...')
+        print('等待程序退出...')
 
 
