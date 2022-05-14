@@ -97,29 +97,30 @@ def load_model(args):
 
 ''''''
 
-def wangluo(image,aims):
+def wangluo(image,aims):                  # 推理的主干
     '''进行推理'''
     # 1.6ms
-    img = letterbox(image, img_size, stride=stride)[0]  # 将截图image传入处理程序
-    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR 转 RGB, to 3x416x416    对图片进行格式转换
+    img = letterbox(image, img_size, stride=stride)[0]  # 将获取的图片image传入处理程序
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR 转 RGB, to 3x416x416    对图片进维度转换
     img = np.ascontiguousarray(img)
 
     # 0.4ms
-    img = torch.from_numpy(img).to(device)  # 4跟随推理程序的64行
-    img = img.half() if half else img.float()  # 4
-    img /= 255.0  # 4跟随66，对3个rgb（0.256）进行规划，对图片进行归化处理
+    img = torch.from_numpy(img).to(device)  # 放入设备
+    img = img.half() if half else img.float()  # 根据设备选择单精度还是半精度
+    img /= 255.0  #对3个rgb值（0.256）进行归一化
     if img.ndimension() == 3:  # 4
-        img = img[None]  # 4与img = img.unsqueeze(0)一模一样
+        img = img[None]  
+    # img = img.unsqueeze(0)
 
-        # 截图和对图片进行归化用了50-70ms左右
+    # 截图和对图片进行归化用了50-70ms左右
     '''----调用yolov5推理----'''
     # 50ms左右
 
-    pred = model(img, augment='store_true')[0]  # 初始化数据
-    pred = non_max_suppression(pred, conf_thres = args.conf_thres, iou_thres = args.iou_thres, classes=None, agnostic=False)  # 4跟随75，传入参数进行推理
+    pred = model(img, augment='store_true')[0]  # 传入图片进行推理
+    pred = non_max_suppression(pred, conf_thres = args.conf_thres, iou_thres = args.iou_thres, classes=None, agnostic=False)  # 非极大值抑制
     # tis2 = time.perf_counter()
     # print(tis2 - tis1)
-    # print(pred)                                                     #输出检测到的图片数据
+    # print(pred)                                                     
 
     '''----对推理的结果进行解密----'''
     # 2ms
@@ -129,16 +130,13 @@ def wangluo(image,aims):
         if len(det):
             det[:, :4] = scale_coords(img.shape[2:], det[:, :4], image.shape).round()
             for *xyxy, conf, cls in reversed(det):
-                # bbox;(tag,x_center,y_center,x_width,y_width)
-                '''
-                0 hat
-                '''
-                xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+
+                xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # 归一化 xywh
                 line = (cls, *xywh)  # label format
                 aim = ('%g ' * len(line)).rstrip() % line
-                aim = aim.split(' ')  # 曾经重大bug，split书写错误
+                aim = aim.split(' ') 
                 #print(aim)
-                aims.append(aim)  # 将标签数据写入aims列表
+                aims.append(aim)  # 将标签数据和xywh写入aims列表
     return aims
 
 '''视频识别'''
@@ -150,30 +148,30 @@ def video2image(video_input,output_path):
     frame_frequency = 10  # 提取视频的频率，每frameFrequency帧提取一张图片，提取完整视频帧设置为1
 
     cap = cv2.VideoCapture(video_input)  # 读取视频文件
-    frameall = int(cap.get(7))  # 7获取总帧数,cv2.CAP_PROP_FRAME_COUNT
+    frameall = int(cap.get(7))  # 7获取总帧数,7等效于cv2.CAP_PROP_FRAME_COUNT
     print('本次识别视频一共有',frameall,'帧')
     print('开始提取', video_input, '视频')
 
     while True:
         aims = []
         times += 1
-        res, image = cap.read()  # 读出图片。res表示是否读取到图片，image表示读取到的每一帧图片，每调用一次读取下一帧数
+        res, image = cap.read()  # 读出图片。res表示是否读取到图片，image表示读取到的每一帧图片，每调用一次读取下一帧
         if times >= frameall:
             print('————视频图片已提取结束')
             break
         '''进行推理'''
         wangluo(image,aims)
         '''推理结束，判断是否有识别出的数据'''
-        if args.save_img:
-            if len(aims):
-                if times % frame_frequency == 0:
-                    img_name = str(count).zfill(6) + '.jpg'  # 图片计数，6位上限
+        if args.save_img:           # 是否保存图片
+            if len(aims):           # 推理结果是否有目标
+                if times % frame_frequency == 0:            # 每frame_frequency帧保存
+                    img_name = str(count).zfill(6) + '.jpg'  # 图片计数，6位上限, jpg可以换成其他图片格式,如png等
                     cv2.imwrite(output_path + os.sep + img_name, image)  # 存储图片
                     count += 1
                     # 输出提示
                     if times % 100 == 0:
                         #print(output_path + os.sep + img_name)
-                        print('视频提取进度:',round((times/frameall)*100,1),'%','\t','————{ 运行框中，按< L >跳过此视频识别','如需停止请杀死程序 }————')
+                        print('视频提取进度:',round((times/frameall)*100,1),'%','\t','————{ 运行框中，按< L >跳过此视频识别','如需停止请杀死程序(没做停止) }————')
         if keyboard.is_pressed('l'):
             print('————已跳过本次识别...')
             break
@@ -193,15 +191,14 @@ def fun_mss(mss_output_path):
         aims = []
         image = grab_screen_mss(monitor)
         image = cv2.resize(image, (len_x, len_y))
-        wangluo(image,aims)
-        aims = aims
+        aims = wangluo(image,aims)
         if args.save_img:
             if len(aims):
                 img_name = str(count).zfill(6) + '.jpg'  # 图片计数，6位上限
                 cv2.imwrite(mss_output_path + os.sep + img_name, image)  # 存储图片
                 count += 1
                 print('已识别图片{} 并存入文件夹'.format(img_name),'————{ 在显示窗口按< L >键退出识别 or 直接关闭窗口 }————')
-        if args.show_window:
+        if args.show_window:        # 绘制方框
             for i, det in enumerate(aims):
                 tag, x_center, y_center, width, height = det
                 x_center, width = len_x * float(x_center), len_x * float(width)
@@ -209,9 +206,9 @@ def fun_mss(mss_output_path):
                 top_left = (int(x_center - width / 2.), int(y_center - height / 2.))
                 bottom_right = (int(x_center + width / 2.), int(y_center + height / 2.))
                 cv2.rectangle(image, top_left, bottom_right, (0, 255, 0), thickness=3)
-        if args.show_window:
+        if args.show_window:        # 是否显示
             cv2.imshow('detect', image)      #显示窗口
-            if args.top_most:
+            if args.top_most:                   # 置顶
                 hwnd = win32gui.FindWindow(None, 'detect')
                 CVRECT = cv2.getWindowImageRect('detect')
                 win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
@@ -224,9 +221,9 @@ len_x, len_y = int(x * args.region[0]), int(y * args.region[1])  # 原生分辨�
 top_x, top_y = int(top_x + x // 2 * (1. - args.region[0])), int(
     top_y + y // 2 * (1. - args.region[1]))  ##截图范围的右下角坐标
 monitor = {'left': top_x, 'top': top_y, 'width': len_x,
-           'height': len_y}  # 用mss截取检测图片的分辨率大小，横向对比top_x = 0,  top_y = 0，len_x = 1920,  len_y = 1080
+           'height': len_y}  # 用mss截取检测图片的分辨率大小
 
-'''以上函数的变量定义'''
+'''变量定义'''
 img_size = 640
 model = load_model(args)
 stride = int(model.stride.max())
@@ -238,11 +235,12 @@ if __name__ == '__main__':
 
     '''单个视频文件逐帧推理截图'''
     if args.choose == 0:
-        # 视频路径   # 图片输出路径
+        # 视频路径   
         video_input = args.video_path                     #r'D:\obs\apex\2022-01-11 21-25-45.mp4'
+        # 图片输出路径
         output_path = args.output_path                                     #'D:/obs/img'
         # 输出文件夹不存在，则创建输出文件夹
-        if not os.path.exists(output_path):         #不存在则创建输出文件夹
+        if not os.path.exists(output_path):         
             os.makedirs(output_path)
         print('模式 0:———— 单个视频提取')
         video2image(video_input,output_path)        #run
@@ -263,7 +261,7 @@ if __name__ == '__main__':
             print('此文件夹搜索到以下视频文件：',lst)
             print('-' * 100)
             for file in lst:    #遍历lst的文件信息
-                videos_input = os.path.join(videos_path, file)  # 将主目录和文件拼接，若有子目录则在videos_path后面添加子目录信息
+                videos_input = os.path.join(videos_path, file)  # 将主目录和文件拼接，若有子目录则在自动在videos_path后面添加子目录信息
                 video2image(videos_input, outputs_path)         #run
         print('视频已提取完成，程序退出...')
 
