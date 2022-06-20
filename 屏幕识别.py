@@ -102,16 +102,24 @@ def run():
 
         print('推理时间 {} ms'.format('%.2f' % ((t2 - t1) * 1000)))
 
-        # 后处理
+        # 转换
         aims = []
-        for i, det in enumerate(pred):  # 方向遍历
+        for i, det in enumerate(pred):
             if len(det):
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0.shape).round()  # 将坐标缩放到img0
-                for *xyxy, conf, cls in reversed(det):
-                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4))).view(-1).tolist()  # 左上角右下角坐标转为左上角坐标和宽高
-                    line = (cls, *xywh)  # 将标签和坐标一起写入
-                    aim = ('%g ' * len(line)).rstrip() % line  # 按空格划分元素
-                    aim = aim.split(' ')  # 劈掉多余的空格
+                # 将坐标 (xyxy) 从 img_shape 重新缩放为 img0_shape
+                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0.shape).round()
+                for *xyxy, conf, cls in reversed(det):  # 从末尾遍历
+                    # 将xyxy合并至一个维度,锚框的左上角和右下角
+                    xyxy = (torch.tensor(xyxy).view(1, 4)).view(-1)
+                    # 将类别和坐标合并
+                    line = (cls, *xyxy)
+                    # 提取tensor类型里的坐标数据
+                    aim = ('%g ' * len(
+                        line)).rstrip() % line  # %g 格式为浮点数 .rstrip()删除tring字符串末尾的指定字符,默认为空白符包括空格,即删除2个坐标之间的空格
+                    # 划分元素
+                    aim = aim.split(' ')  # 将一个元素按空格符分为多个元素,获得单个目标信息列表
+                    # 所有目标的类别和锚框的坐标(类别,左上角x,左上角y,右下角x,右下角y)
+                    aims.append(aim)  # 添加至列表
                     aims.append(aim)  # 加入标签列表
 
             if len(aims):  # 如果检测到存在目标
